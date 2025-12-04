@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Logs
+lightning_logs/
+*.log
+
+# Data (optional, depending on size, but usually good to ignore raw large data if not needed for demo)
+# Keeping data for now as user said "todo", but venv is definitely not needed.
+*.zip
