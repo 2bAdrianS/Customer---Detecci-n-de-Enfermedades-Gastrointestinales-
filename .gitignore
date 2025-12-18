@@ -8,6 +8,7 @@ __pycache__/
 venv/
 ENV/
 env/
+.env/
 
 # Logs
 lightning_logs/
@@ -16,3 +17,7 @@ lightning_logs/
 # Data (optional, depending on size, but usually good to ignore raw large data if not needed for demo)
 # Keeping data for now as user said "todo", but venv is definitely not needed.
 *.zip
+
+# Large Data
+Dataset/
+data/

@@ -3,8 +3,8 @@ setlocal
 cd /d "%~dp0"
 set PYTHONPATH=%CD%
 
-if not exist .venv ( py -3 -m venv .venv )
-call .venv\Scripts\activate
+if not exist .env ( py -3.11 -m venv .env )
+call .env\Scripts\activate
 py -m pip install --upgrade pip
 py -m pip install -r requirements.txt
 
