@@ -25,11 +25,12 @@ from src.modelo.inferir import cargar_modelo, predecir
 from src.utils import CLASES_KVASIR, asegurar_dir
 
 
+# 1. Configuración y Estilo
 st.set_page_config(
-    page_title="Detección de enfermedades gastrointestinales",
+    page_title="GastroAI Assistant",
     page_icon="🩺",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 THEME = {
@@ -53,7 +54,7 @@ st.markdown(f"""
   background: var(--bg) !important;
   color: var(--text);
 }}
-.block-container {{ max-width: 1100px; padding-top: 2rem; }}
+.block-container {{ max-width: 100%; padding-top: 2rem; padding-bottom: 2rem; }}
 
 h1, h2, h3 {{ color: var(--text); }}
 p, span, label {{ color: var(--muted); }}
@@ -108,10 +109,7 @@ header [data-testid="stHeaderActionElements"] {{ display:none; }}
 # fin UI
 
 
-# Imagen Cargadad
-st.title("Detección de enfermedades gastrointestinales")
-#st.caption("ResNet18 + Transfer Learning (Kvasir)")
-
+# Carga del modelo (Backend)
 peso = Path("models/kvasir_resnet18.pt")
 if not peso.exists():
     st.error("No existe el modelo. Ejecuta `run_app.bat` para auto-entrenar.")
@@ -119,29 +117,91 @@ if not peso.exists():
 
 modelo = cargar_modelo(peso)
 
-sub = st.file_uploader(
-    "Sube tu imagen endoscópica",
-    type=["jpg", "png", "jpeg"],
-    label_visibility="collapsed"
-)
+
+# 2. Barra Lateral (Sidebar) - Gestión
+with st.sidebar:
+    st.title("GastroAI Control")
+    st.success("🟢 Conectado a EHR: En línea")
+    
+    st.markdown("### Selección de Paciente")
+    sub = st.file_uploader(
+        "Cargar Estudio Endoscópico",
+        type=["jpg", "png", "jpeg"],
+    )
+    
+    st.markdown("---")
+    st.markdown("### Simulación de UX")
+    st.slider("Sensibilidad IA", 0, 100, 85)
+
+
+# 3. Área Principal - Diseño en 2 Columnas
+col_img, col_info = st.columns([2, 1])
+
+uploaded_file_path = None
+etiqueta = None
+prob = None
 
 if sub is not None and peso.exists():
     tmp = Path("data/tmp.jpg")
     tmp.parent.mkdir(exist_ok=True, parents=True)
     with open(tmp, "wb") as f:
         f.write(sub.getbuffer())
+    uploaded_file_path = str(tmp)
+    
+    # Inferencia
+    etiqueta, prob = predecir(modelo, uploaded_file_path)
 
-    etiqueta, prob = predecir(modelo, str(tmp))
-    st.image(str(tmp), caption=f"Predicción: {etiqueta} — confianza {prob:.2f}")
-    st.success(f"Clase detectada: {etiqueta}")
-    st.progress(min(1.0, prob))
-    st.write("Clases:", CLASES_KVASIR)
+# Columna Izquierda: Visualización
+with col_img:
+    if uploaded_file_path:
+        st.image(uploaded_file_path, use_container_width=True, caption="Imagen Endoscópica")
+    else:
+        st.info("👋 Bienvenido a GastroAI Assistant. Por favor, cargue un estudio endoscópico desde el panel lateral.")
+        # Placeholder visual
+        st.markdown(
+            """
+            <div style='display: flex; justify-content: center; align-items: center; height: 300px; border: 2px dashed #333; border-radius: 10px; background-color: #1e2129;'>
+                <h3 style='color: #555;'>Vista previa de imagen</h3>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
+
+# Columna Derecha: Diagnóstico Clínico
+with col_info:
+    if etiqueta:
+        st.subheader("Resultados del Análisis")
+        
+        # Lógica simple: Si tiene "normal", es verde. 
+        # (Aunque en este dataset específico parecen ser todas patologías, se deja la lógica abierta)
+        is_healthy = "normal" in etiqueta.lower()
+        
+        if is_healthy:
+            st.success(f"SANO: {etiqueta}")
+        else:
+            st.error(f"DETECTADO: {etiqueta}")
+            
+        st.metric(label="Certeza IA", value=f"{prob*100:.2f}%")
+        
+        viz_mode = st.radio("Capas Visuales", ["Original", "Grad-CAM"])
+        if viz_mode == "Grad-CAM":
+            st.info("Generando mapa de calor...")
+        
+        st.markdown("---")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.button("✅ Confirmar", use_container_width=True)
+        with c2:
+            st.button("❌ Falso Positivo", use_container_width=True)
+
+    else:
+        # Estado vacío de la derecha
+        st.write("Esperando carga de imagen para diagnóstico...")
 
 
-st.markdown("---")
-st.header("📊 Evaluación del modelo")
+# 4. Manejo de Gráficas Técnicas (Funciones y Expander)
 
-# métricas/gráficas
+# (Definiciones de funciones auxiliares originales)
 
 # mismas transformaciones que el software usa en inferencia
 TFM = transforms.Compose([
@@ -305,60 +365,65 @@ def plot_training_curves():
     return fig
 
 
-# ejecución panel
-col1, col2 = st.columns([1,1])
-with col1:
-    split = st.radio("Conjunto a evaluar", options=["val", "test"], index=0, horizontal=True)
-with col2:
-    fmt = st.selectbox("Formato para exportar", options=["PNG", "JPG"], index=0)
+# Sección Técnica Oculta
+st.markdown("---")
+with st.expander("Ver Detalles Técnicos del Modelo (Solo Admin)", expanded=False):
+    st.header("📊 Evaluación del modelo")
+    
+    # ejecución panel
+    col1, col2 = st.columns([1,1])
+    with col1:
+        split = st.radio("Conjunto a evaluar", options=["val", "test"], index=0, horizontal=True)
+    with col2:
+        fmt = st.selectbox("Formato para exportar", options=["PNG", "JPG"], index=0)
 
-if st.button("Calcular y generar gráficas", type="primary"):
-    with st.spinner("Calculando métricas…"):
-        y_true, y_pred, y_proba, labels = infer_dataset(split, peso.stat().st_mtime)
+    if st.button("Calcular y generar gráficas", type="primary"):
+        with st.spinner("Calculando métricas…"):
+            y_true, y_pred, y_proba, labels = infer_dataset(split, peso.stat().st_mtime)
 
-    # Matriz de confusión - conteos
-    fig1 = plot_confusion(y_true, y_pred, labels, normalize=False)
-    path1 = _save_fig(fig1, f"confusion_{split}", ext=fmt)
-    st.pyplot(fig1)
-    st.download_button("Descargar matriz (conteos)", data=open(path1, "rb").read(),
-                       file_name=path1.name, mime=f"image/{fmt.lower()}")
+        # Matriz de confusión - conteos
+        fig1 = plot_confusion(y_true, y_pred, labels, normalize=False)
+        path1 = _save_fig(fig1, f"confusion_{split}", ext=fmt)
+        st.pyplot(fig1)
+        st.download_button("Descargar matriz (conteos)", data=open(path1, "rb").read(),
+                           file_name=path1.name, mime=f"image/{fmt.lower()}")
 
-    # Matriz de confusióbn normalizada
-    fig2 = plot_confusion(y_true, y_pred, labels, normalize=True)
-    path2 = _save_fig(fig2, f"confusion_norm_{split}", ext=fmt)
-    st.pyplot(fig2)
-    st.download_button("Descargar matriz normalizada", data=open(path2, "rb").read(),
-                       file_name=path2.name, mime=f"image/{fmt.lower()}")
+        # Matriz de confusióbn normalizada
+        fig2 = plot_confusion(y_true, y_pred, labels, normalize=True)
+        path2 = _save_fig(fig2, f"confusion_norm_{split}", ext=fmt)
+        st.pyplot(fig2)
+        st.download_button("Descargar matriz normalizada", data=open(path2, "rb").read(),
+                           file_name=path2.name, mime=f"image/{fmt.lower()}")
 
-    # F1 por clase
-    fig3 = plot_f1_bars(y_true, y_pred, labels)
-    path3 = _save_fig(fig3, f"f1_por_clase_{split}", ext=fmt)
-    st.pyplot(fig3)
-    st.download_button("Descargar F1 por clase", data=open(path3, "rb").read(),
-                       file_name=path3.name, mime=f"image/{fmt.lower()}")
+        # F1 por clase
+        fig3 = plot_f1_bars(y_true, y_pred, labels)
+        path3 = _save_fig(fig3, f"f1_por_clase_{split}", ext=fmt)
+        st.pyplot(fig3)
+        st.download_button("Descargar F1 por clase", data=open(path3, "rb").read(),
+                           file_name=path3.name, mime=f"image/{fmt.lower()}")
 
-    # Curvas ROC
-    fig4 = plot_roc_ovr(y_true, y_proba, labels)
-    path4 = _save_fig(fig4, f"roc_ovr_{split}", ext=fmt)
-    st.pyplot(fig4)
-    st.download_button("Descargar ROC one-vs-rest", data=open(path4, "rb").read(),
-                       file_name=path4.name, mime=f"image/{fmt.lower()}")
+        # Curvas ROC
+        fig4 = plot_roc_ovr(y_true, y_proba, labels)
+        path4 = _save_fig(fig4, f"roc_ovr_{split}", ext=fmt)
+        st.pyplot(fig4)
+        st.download_button("Descargar ROC one-vs-rest", data=open(path4, "rb").read(),
+                           file_name=path4.name, mime=f"image/{fmt.lower()}")
 
-    # Curvas Precisión – Recal
-    fig5 = plot_pr_curves(y_true, y_proba, labels)
-    path5 = _save_fig(fig5, f"pr_curves_{split}", ext=fmt)
-    st.pyplot(fig5)
-    st.download_button("Descargar curvas P–R", data=open(path5, "rb").read(),
-                       file_name=path5.name, mime=f"image/{fmt.lower()}")
+        # Curvas Precisión – Recal
+        fig5 = plot_pr_curves(y_true, y_proba, labels)
+        path5 = _save_fig(fig5, f"pr_curves_{split}", ext=fmt)
+        st.pyplot(fig5)
+        st.download_button("Descargar curvas P–R", data=open(path5, "rb").read(),
+                           file_name=path5.name, mime=f"image/{fmt.lower()}")
 
-    # Curvas de entrenamiento - deben tener logs
-    fig6 = plot_training_curves()
-    if fig6 is not None:
-        path6 = _save_fig(fig6, f"training_curves", ext=fmt)
-        st.pyplot(fig6)
-        st.download_button("Descargar curvas de entrenamiento", data=open(path6, "rb").read(),
-                           file_name=path6.name, mime=f"image/{fmt.lower()}")
-    else:
-        st.info("No encontré `lightning_logs/**/metrics.csv` para dibujar las curvas de entrenamiento.")
+        # Curvas de entrenamiento - deben tener logs
+        fig6 = plot_training_curves()
+        if fig6 is not None:
+            path6 = _save_fig(fig6, f"training_curves", ext=fmt)
+            st.pyplot(fig6)
+            st.download_button("Descargar curvas de entrenamiento", data=open(path6, "rb").read(),
+                               file_name=path6.name, mime=f"image/{fmt.lower()}")
+        else:
+            st.info("No encontré `lightning_logs/**/metrics.csv` para dibujar las curvas de entrenamiento.")
 
-    st.success("¡Listo! Las gráficas también quedaron guardadas en la carpeta `reports/`.")
+        st.success("¡Listo! Las gráficas también quedaron guardadas en la carpeta `reports/`.")
